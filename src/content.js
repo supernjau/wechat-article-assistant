@@ -375,38 +375,108 @@
     return style.display !== "none" && style.visibility !== "hidden";
   }
 
+  const PUBLISHED_DATE_PATTERN =
+    /(?:19|20)\d{2}(?:[-/.]\d{1,2}[-/.]\d{1,2}|年\d{1,2}月\d{1,2}日?)/;
+  const ARTICLE_URL_ATTRIBUTES = new Set([
+    "href",
+    "value",
+    "data-url",
+    "data-link",
+    "data-href",
+    "data-appmsg-url",
+  ]);
+
+  function extractOfficialArticleUrl(element) {
+    if (!element) return "";
+    const values = [];
+    for (const node of [element, ...element.querySelectorAll("*")]) {
+      for (const attribute of Array.from(node.attributes || [])) {
+        if (
+          ARTICLE_URL_ATTRIBUTES.has(attribute.name.toLowerCase()) ||
+          /mp\.weixin\.qq\.com/i.test(attribute.value)
+        ) {
+          values.push(attribute.value);
+        }
+      }
+    }
+    for (const value of values) {
+      const decodedValues = [String(value || "").replace(/&amp;/gi, "&")];
+      try {
+        decodedValues.push(decodeURIComponent(decodedValues[0]));
+      } catch {
+        // Some official attributes contain ordinary percent signs.
+      }
+      for (const decoded of decodedValues) {
+        const direct = Core.safeRecommendationUrl(decoded);
+        if (direct) return direct;
+        const match = decoded.match(/https:\/\/mp\.weixin\.qq\.com\/s[^\s"'<>]*/i);
+        const extracted = Core.safeRecommendationUrl(match && match[0]);
+        if (extracted) return extracted;
+      }
+    }
+    return "";
+  }
+
+  function extractRecentTitle(element) {
+    if (!element) return "";
+    const titled =
+      (element.matches("[data-title],[title]") && element) ||
+      element.querySelector("[data-title],[class*='title'],[title]");
+    return Core.normalizeRecentTitle(
+      (titled &&
+        (titled.getAttribute("data-title") ||
+          titled.getAttribute("title") ||
+          titled.textContent)) ||
+        element.textContent ||
+        "",
+    );
+  }
+
+  function recentArticleRowForRadio(radio, scope) {
+    const explicit = radio.closest(
+      "label,li,tr,[role='option'],[class*='item'],[class*='radio']",
+    );
+    if (
+      explicit &&
+      explicit !== scope &&
+      PUBLISHED_DATE_PATTERN.test(explicit.textContent || "")
+    ) {
+      return explicit;
+    }
+    let current = radio.parentElement;
+    while (current && current !== scope) {
+      if (PUBLISHED_DATE_PATTERN.test(current.textContent || "")) return current;
+      current = current.parentElement;
+    }
+    return explicit || radio.parentElement;
+  }
+
   function scrapeRecentArticles() {
     const containers = Array.from(
       root.document.querySelectorAll(
-        "[role='dialog'],.weui-desktop-dialog,.dialog,.pop_dialog,.sewa-mock-link-dialog",
+        "[role='dialog'],.weui-desktop-dialog,.dialog,.pop_dialog,[class*='dialog'],[class*='modal'],.sewa-mock-link-dialog",
       ),
     ).filter(isVisible);
     const scopes = containers.length ? containers : [root.document];
-    const seen = new Set();
-    const articles = [];
+    const candidates = [];
     for (const scope of scopes) {
-      for (const anchor of scope.querySelectorAll("a[href],[data-url],[data-link]")) {
-        const url = [
-          anchor.getAttribute("href"),
-          anchor.dataset.url,
-          anchor.dataset.link,
-        ]
-          .map((candidate) => Core.safeRecommendationUrl(candidate || ""))
-          .find(Boolean);
-        const title = (
-          anchor.getAttribute("data-title") ||
-          anchor.textContent ||
-          ""
-        )
-          .replace(/\s+/g, " ")
-          .trim();
-        if (!url || !title || seen.has(url)) continue;
-        seen.add(url);
-        articles.push({ title, url });
-        if (articles.length === 5) return articles;
+      for (const element of scope.querySelectorAll(
+        "[href],[data-url],[data-link],[data-href],[data-appmsg-url]",
+      )) {
+        const url = extractOfficialArticleUrl(element);
+        if (!url) continue;
+        candidates.push({ title: extractRecentTitle(element), url });
+      }
+      for (const radio of scope.querySelectorAll("input[type='radio']")) {
+        if (radio.closest(".sewa-panel,.sewa-launcher")) continue;
+        const row = recentArticleRowForRadio(radio, scope);
+        if (!row) continue;
+        const url = extractOfficialArticleUrl(row);
+        if (!url && !PUBLISHED_DATE_PATTERN.test(row.textContent || "")) continue;
+        candidates.push({ title: extractRecentTitle(row), url });
       }
     }
-    return articles;
+    return Core.collectRecentArticles(candidates, 5);
   }
 
   function openOfficialLinkPicker() {
@@ -444,7 +514,9 @@
     articleList.innerHTML = state.articles.length
       ? state.articles
           .map(
-            (article, index) => `
+            (article, index) => {
+              const hasValidUrl = Boolean(Core.safeRecommendationUrl(article.url));
+              return `
               <div class="sewa-article-row" data-sewa-index="${index}">
                 <div class="sewa-article-row-header">
                   <span class="sewa-article-number">${String(index + 1).padStart(2, "0")}</span>
@@ -455,8 +527,9 @@
                   </div>
                 </div>
                 <input class="sewa-input" data-sewa-article-field="title" value="${escape(article.title)}" placeholder="文章标题">
-                <input class="sewa-input" data-sewa-article-field="url" value="${escape(article.url)}" placeholder="https://mp.weixin.qq.com/s/...">
-              </div>`,
+                <input class="sewa-input${hasValidUrl ? "" : " is-missing"}" data-sewa-article-field="url" value="${escape(article.url)}" placeholder="请补充 https://mp.weixin.qq.com/s/...">
+              </div>`;
+            },
           )
           .join("")
       : '<p class="sewa-empty">暂未读取文章。可从官方窗口读取，或手动添加。</p>';
@@ -490,6 +563,13 @@
       normalizeArticles();
       if (!state.articles.length) {
         showStatus("请先读取或添加至少一篇文章。", "error");
+        return;
+      }
+      const missingUrls = state.articles.filter(
+        (article) => !Core.safeRecommendationUrl(article.url),
+      ).length;
+      if (missingUrls) {
+        showStatus(`还有 ${missingUrls} 篇文章缺少有效链接，请补充后再插入。`, "error");
         return;
       }
       const html = Core.buildRecommendationHtml(state.templateId, state.articles);
@@ -550,11 +630,16 @@
       state.articles = scrapeRecentArticles();
       renderRecommendations();
       saveState();
+      const missingUrls = state.articles.filter(
+        (article) => !Core.safeRecommendationUrl(article.url),
+      ).length;
       showStatus(
         state.articles.length
-          ? `已读取 ${state.articles.length} 篇文章，可在插入前校正。`
+          ? missingUrls
+            ? `已读取 ${state.articles.length} 篇文章，其中 ${missingUrls} 篇未提取到链接。请补充后再插入。`
+            : `已读取 ${state.articles.length} 篇文章，可在插入前校正。`
           : "未读取到文章。请先打开官方超链接窗口，或手动添加。",
-        state.articles.length ? "success" : "error",
+        state.articles.length && !missingUrls ? "success" : "error",
       );
     }
     if (action === "add-article" && state.articles.length < 5) {

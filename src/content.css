@@ -209,6 +209,11 @@
   box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
 }
 
+.sewa-input.is-missing {
+  border-color: #d97706;
+  background: #fffbeb;
+}
+
 .sewa-file-button,
 .sewa-primary-button,
 .sewa-secondary-button,

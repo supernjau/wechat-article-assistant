@@ -118,6 +118,43 @@ test("safeRecommendationUrl accepts only official published WeChat article URLs"
   }
 });
 
+test("normalizeRecentTitle removes published dates and collapses row whitespace", () => {
+  assert.equal(
+    Core.normalizeRecentTitle(
+      '  “你真厉害”别只会说 amazing！这些说法更地道 \n 2026-05-28 ',
+    ),
+    '“你真厉害”别只会说 amazing！这些说法更地道',
+  );
+  assert.equal(
+    Core.normalizeRecentTitle("定金、订金用英文到底怎么说？ 2026年5月27日"),
+    "定金、订金用英文到底怎么说？",
+  );
+});
+
+test("collectRecentArticles keeps title-only radio rows, deduplicates, and limits results", () => {
+  const articles = Core.collectRecentArticles([
+    {
+      title: " 第一篇文章 \n 2026-05-28 ",
+      url: "https://mp.weixin.qq.com/s/first",
+    },
+    { title: "第一篇文章\n2026-05-28", url: "" },
+    { title: "第二篇文章\n2026-05-27", url: "" },
+    { title: "第二篇文章\n2026-05-27", url: "" },
+    { title: "第三篇文章", url: "https://evil.example/s/third" },
+    { title: "第四篇文章", url: "" },
+    { title: "第五篇文章", url: "" },
+    { title: "第六篇文章", url: "" },
+  ]);
+
+  assert.deepEqual(articles, [
+    { title: "第一篇文章", url: "https://mp.weixin.qq.com/s/first" },
+    { title: "第二篇文章", url: "" },
+    { title: "第三篇文章", url: "" },
+    { title: "第四篇文章", url: "" },
+    { title: "第五篇文章", url: "" },
+  ]);
+});
+
 test("buildRecommendationHtml degrades non-WeChat article URLs to non-clickable titles", () => {
   const invalidUrls = [
     "file:///tmp/article.html",

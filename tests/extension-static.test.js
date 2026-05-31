@@ -37,6 +37,13 @@ test("content panel exposes the three requested workflows", () => {
   }
 });
 
+test("recent article scraper recognizes official radio-list rows without requiring URLs", () => {
+  const content = read("src/content.js");
+  assert.match(content, /input\[type='radio'\]/);
+  assert.match(content, /Core\.collectRecentArticles/);
+  assert.match(content, /缺少有效链接/);
+});
+
 test("HTML import action stays visible before the long preview area", () => {
   const content = read("src/content.js");
   const action = content.indexOf('data-sewa-action="import-html"');

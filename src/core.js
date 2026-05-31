@@ -59,6 +59,34 @@
     }
   }
 
+  function normalizeRecentTitle(value) {
+    return String(value || "")
+      .replace(
+        /(?:19|20)\d{2}(?:[-/.]\d{1,2}[-/.]\d{1,2}|年\d{1,2}月\d{1,2}日?)/g,
+        " ",
+      )
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function collectRecentArticles(candidates, limit) {
+    const articles = [];
+    const seenTitles = new Set();
+    const seenUrls = new Set();
+    const maxItems = Number.isInteger(limit) && limit > 0 ? limit : 5;
+    for (const candidate of Array.isArray(candidates) ? candidates : []) {
+      if (!candidate || typeof candidate !== "object") continue;
+      const title = normalizeRecentTitle(candidate.title);
+      const url = safeRecommendationUrl(candidate.url);
+      if (!title || seenTitles.has(title) || (url && seenUrls.has(url))) continue;
+      seenTitles.add(title);
+      if (url) seenUrls.add(url);
+      articles.push({ title, url });
+      if (articles.length === maxItems) break;
+    }
+    return articles;
+  }
+
   function link(article, label, style) {
     const href = safeRecommendationUrl(article.url);
     const title = escapeHtml(article.title || "未命名文章");
@@ -156,6 +184,8 @@
     TEMPLATE_IDS,
     escapeHtml,
     safeRecommendationUrl,
+    normalizeRecentTitle,
+    collectRecentArticles,
     buildRecommendationHtml,
   };
 });
