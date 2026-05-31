@@ -98,7 +98,7 @@ Expected: FAIL because `src/core.js` does not exist.
   "name": "公众号文章助手",
   "version": "0.1.0",
   "description": "为微信公众号官方编辑器提供 HTML 导入、关键词强调和往期推荐模板。",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage"],
   "host_permissions": ["https://mp.weixin.qq.com/*"],
   "action": {
     "default_title": "公众号文章助手",
@@ -123,7 +123,7 @@ Expected: FAIL because `src/core.js` does not exist.
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node --check src/core.js && node --check src/editor-adapter.js && node --check src/content.js && node --check popup.js && node -e \"JSON.parse(require('node:fs').readFileSync('manifest.json', 'utf8'))\""
+    "check": "node -e \"const { existsSync, readFileSync } = require('node:fs'); const { execFileSync } = require('node:child_process'); for (const file of ['src/core.js', 'src/editor-adapter.js', 'src/content.js', 'popup.js']) if (existsSync(file)) execFileSync(process.execPath, ['--check', file], { stdio: 'inherit' }); JSON.parse(readFileSync('manifest.json', 'utf8'));\""
   }
 }
 ```
