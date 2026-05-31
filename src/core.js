@@ -17,7 +17,8 @@
 
   function safeUrl(value) {
     const url = String(value || "").trim();
-    return /^(?:javascript|data|vbscript):/i.test(url) ? "" : url;
+    const normalized = url.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+    return /^(?:javascript|data|vbscript):/i.test(normalized) ? "" : url;
   }
 
   return { parseKeywords, safeUrl };

@@ -12,6 +12,9 @@ test("parseKeywords splits commas and new lines, removes duplicates, and sorts l
 
 test("safeUrl blocks script URLs and keeps normal article URLs", () => {
   assert.equal(Core.safeUrl("javascript:alert(1)"), "");
+  assert.equal(Core.safeUrl("java\nscript:alert(1)"), "");
+  assert.equal(Core.safeUrl("java\tscript:alert(1)"), "");
+  assert.equal(Core.safeUrl("java\rscript:alert(1)"), "");
   assert.equal(Core.safeUrl(" DATA:text/html,<p>bad</p> "), "");
   assert.equal(Core.safeUrl("vbscript:msgbox(1)"), "");
   assert.equal(
