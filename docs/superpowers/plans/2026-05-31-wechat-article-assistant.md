@@ -190,7 +190,7 @@ function escapeHtml(value) {
 }
 
 function link(article, label, style) {
-  const href = safeUrl(article.url);
+  const href = safeRecommendationUrl(article.url);
   const title = escapeHtml(article.title || "未命名文章");
   const content = label ? `${escapeHtml(label)} ${title}` : title;
   return href
@@ -221,6 +221,15 @@ function buildRecommendationHtml(templateId, articles) {
   return heading + items.map((article) => `<p style="margin:0;padding:9px 0;border-bottom:1px solid #eef2f7;">${link(article, "", "font-size:15px;line-height:1.7;color:#334155;text-decoration:none;")}</p>`).join("") + end;
 }
 ```
+
+Recommendation links must only become clickable when they use HTTPS and point to
+an official published WeChat article URL under `mp.weixin.qq.com/s`. Invalid,
+external, or non-HTTPS URLs degrade to a non-clickable `span` while keeping the
+article title. Filter malformed article entries such as `null` before rendering.
+
+The `editor` template must render `精选` as a distinct visual label. The
+`magazine` template must render the article title and arrow as separate,
+visually split inline structures rather than a plain text prefix.
 
 - [ ] **Step 4: 运行测试并确认通过**
 
