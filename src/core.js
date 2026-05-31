@@ -69,6 +69,17 @@
       .trim();
   }
 
+  function pickRecentTitle(values) {
+    const actions = /(?:查看文章|查看详情|阅读全文|预览文章|打开文章)/g;
+    for (const value of Array.isArray(values) ? values : [values]) {
+      for (const line of String(value || "").split(/\r?\n/)) {
+        const title = normalizeRecentTitle(line.replace(actions, " "));
+        if (title) return title;
+      }
+    }
+    return "";
+  }
+
   function collectRecentArticles(candidates, limit) {
     const articles = [];
     const seenTitles = new Set();
@@ -185,6 +196,7 @@
     escapeHtml,
     safeRecommendationUrl,
     normalizeRecentTitle,
+    pickRecentTitle,
     collectRecentArticles,
     buildRecommendationHtml,
   };

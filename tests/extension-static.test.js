@@ -41,6 +41,7 @@ test("recent article scraper recognizes official radio-list rows without requiri
   const content = read("src/content.js");
   assert.match(content, /input\[type='radio'\]/);
   assert.match(content, /Core\.collectRecentArticles/);
+  assert.match(content, /Core\.pickRecentTitle/);
   assert.match(content, /缺少有效链接/);
 });
 

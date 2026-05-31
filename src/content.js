@@ -419,36 +419,24 @@
 
   function extractRecentTitle(element) {
     if (!element) return "";
-    const titled =
-      (element.matches("[data-title],[title]") && element) ||
-      element.querySelector("[data-title],[class*='title'],[title]");
-    return Core.normalizeRecentTitle(
-      (titled &&
-        (titled.getAttribute("data-title") ||
-          titled.getAttribute("title") ||
-          titled.textContent)) ||
-        element.textContent ||
-        "",
-    );
+    const values = [
+      element.getAttribute("data-title"),
+      element.getAttribute("title"),
+    ];
+    for (const titled of element.querySelectorAll("[data-title],[class*='title']")) {
+      values.push(titled.getAttribute("data-title"), titled.textContent);
+    }
+    values.push(element.textContent);
+    return Core.pickRecentTitle(values);
   }
 
-  function recentArticleRowForRadio(radio, scope) {
-    const explicit = radio.closest(
-      "label,li,tr,[role='option'],[class*='item'],[class*='radio']",
-    );
-    if (
-      explicit &&
-      explicit !== scope &&
-      PUBLISHED_DATE_PATTERN.test(explicit.textContent || "")
-    ) {
-      return explicit;
-    }
-    let current = radio.parentElement;
+  function recentArticleRowForElement(element, scope) {
+    let current = element;
     while (current && current !== scope) {
       if (PUBLISHED_DATE_PATTERN.test(current.textContent || "")) return current;
       current = current.parentElement;
     }
-    return explicit || radio.parentElement;
+    return element;
   }
 
   function scrapeRecentArticles() {
@@ -465,11 +453,12 @@
       )) {
         const url = extractOfficialArticleUrl(element);
         if (!url) continue;
-        candidates.push({ title: extractRecentTitle(element), url });
+        const row = recentArticleRowForElement(element, scope);
+        candidates.push({ title: extractRecentTitle(row), url });
       }
       for (const radio of scope.querySelectorAll("input[type='radio']")) {
         if (radio.closest(".sewa-panel,.sewa-launcher")) continue;
-        const row = recentArticleRowForRadio(radio, scope);
+        const row = recentArticleRowForElement(radio, scope);
         if (!row) continue;
         const url = extractOfficialArticleUrl(row);
         if (!url && !PUBLISHED_DATE_PATTERN.test(row.textContent || "")) continue;

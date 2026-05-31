@@ -131,6 +131,16 @@ test("normalizeRecentTitle removes published dates and collapses row whitespace"
   );
 });
 
+test("pickRecentTitle ignores official view actions and keeps the article title", () => {
+  assert.equal(
+    Core.pickRecentTitle([
+      "查看文章",
+      "“你真厉害”别只会说 amazing！这些说法更地道\n2026-05-28\n查看文章",
+    ]),
+    "“你真厉害”别只会说 amazing！这些说法更地道",
+  );
+});
+
 test("collectRecentArticles keeps title-only radio rows, deduplicates, and limits results", () => {
   const articles = Core.collectRecentArticles([
     {
