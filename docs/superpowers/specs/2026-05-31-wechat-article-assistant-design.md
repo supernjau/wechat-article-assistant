@@ -186,10 +186,6 @@ chajian/
 │   └── superpowers/
 │       └── specs/
 │           └── 2026-05-31-wechat-article-assistant-design.md
-└── image/
-    ├── articles.png
-    ├── html-import.png
-    └── keywords-highlight.png
 ```
 
 ## 7. 验证方案
@@ -229,4 +225,3 @@ chajian/
 - 多人协作。
 - 绕过微信公众号登录或权限机制。
 - 依赖公众号未公开接口批量抓取历史文章。
-

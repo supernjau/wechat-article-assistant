@@ -10,20 +10,6 @@
 
 文章正文、HTML 文件和插件设置只在本地浏览器中处理，不会上传到外部服务器。
 
-## 界面预览
-
-### HTML 导入
-
-![HTML 导入界面](image/html-import.png)
-
-### 全文关键词强调
-
-![关键词强调界面](image/keywords-highlight.png)
-
-### 往期推荐
-
-![往期推荐界面](image/articles.png)
-
 ## 安装方法
 
 本扩展暂未发布到 Chrome 应用商店，需要手动加载一次。以后正常使用时，无需重复安装。
