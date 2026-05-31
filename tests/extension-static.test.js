@@ -60,3 +60,13 @@ test("panel CSS keeps a mobile-safe width and restrained radii", () => {
   assert.match(css, /max-width:\s*calc\(100vw - 24px\)/);
   assert.doesNotMatch(css, /border-radius:\s*(?:[9-9]|[1-9][0-9]+)px/);
 });
+
+test("primary actions resist host-page button style overrides", () => {
+  const css = read("src/content.css");
+  assert.match(css, /\.sewa-panel button\.sewa-primary-button\s*\{/);
+  assert.match(css, /background-color:\s*#0f766e\s*!important/);
+  assert.match(css, /color:\s*#ffffff\s*!important/);
+  assert.match(css, /opacity:\s*1\s*!important/);
+  assert.match(css, /visibility:\s*visible\s*!important/);
+  assert.match(read("src/content.js"), /class="sewa-button-icon"[^>]*>↓<\/span>导入正文/);
+});

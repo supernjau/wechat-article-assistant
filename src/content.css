@@ -243,18 +243,34 @@
   display: none;
 }
 
-.sewa-primary-button {
-  border: 1px solid #0f766e;
-  background: #0f766e;
-  color: #ffffff;
+.sewa-panel button.sewa-primary-button {
+  display: inline-flex !important;
+  border: 1px solid #0f766e !important;
+  background: #0f766e !important;
+  background-color: #0f766e !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
 }
 
-.sewa-primary-button:hover {
-  background: #115e59;
+.sewa-panel button.sewa-primary-button:hover {
+  background: #115e59 !important;
+  background-color: #115e59 !important;
 }
 
-.sewa-import-submit {
-  width: 100%;
+.sewa-panel button.sewa-import-submit {
+  width: 100% !important;
+}
+
+.sewa-button-icon {
+  display: inline-block;
+  margin-right: 6px;
+  color: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .sewa-primary-button:disabled,

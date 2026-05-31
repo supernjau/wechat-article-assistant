@@ -135,7 +135,7 @@
             <label class="sewa-segment"><input type="radio" name="sewa-import-mode" value="cursor"><span>插入光标位置</span></label>
           </div>
         </div>
-        <button type="button" class="sewa-primary-button sewa-import-submit" data-sewa-action="import-html">导入正文</button>
+        <button type="button" class="sewa-primary-button sewa-import-submit" data-sewa-action="import-html"><span class="sewa-button-icon" aria-hidden="true">↓</span>导入正文</button>
         <div class="sewa-field">
           <span class="sewa-label">导入预览</span>
           <iframe class="sewa-preview-frame sewa-import-preview" sandbox="" title="HTML 导入预览"></iframe>
