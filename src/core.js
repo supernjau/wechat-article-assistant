@@ -39,8 +39,24 @@
       .replace(/'/g, "&#39;");
   }
 
+  function safeRecommendationUrl(value) {
+    const url = safeUrl(value);
+    if (!url) return "";
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === "https://mp.weixin.qq.com" &&
+        !parsed.username &&
+        !parsed.password &&
+        /^\/s(?:\/|$)/.test(parsed.pathname)
+        ? url
+        : "";
+    } catch {
+      return "";
+    }
+  }
+
   function link(article, label, style) {
-    const href = safeUrl(article.url);
+    const href = safeRecommendationUrl(article.url);
     const title = escapeHtml(article.title || "未命名文章");
     const content = label ? `${escapeHtml(label)} ${title}` : title;
     return href
@@ -49,7 +65,12 @@
   }
 
   function buildRecommendationHtml(templateId, articles) {
-    const items = (Array.isArray(articles) ? articles : []).slice(0, 5);
+    const items = (Array.isArray(articles) ? articles : [])
+      .filter(
+        (article) =>
+          article && typeof article === "object" && !Array.isArray(article),
+      )
+      .slice(0, 5);
     const id = TEMPLATE_IDS.includes(templateId) ? templateId : "clean";
     const heading = `<section style="margin:32px 0 8px;padding:0;"><p style="margin:0 0 14px;font-size:18px;font-weight:700;color:#1f2937;">往期推荐</p>`;
     const end = `</section>`;
@@ -71,7 +92,7 @@
         items
           .map(
             (article) =>
-              `<p style="margin:8px 0;padding:10px 12px;background:#f8fafc;border-radius:4px;">${link(article, "精选", "font-size:15px;line-height:1.7;color:#0f766e;text-decoration:none;")}</p>`,
+              `<p style="margin:8px 0;padding:10px 12px;background:#f8fafc;border-radius:4px;"><span style="display:inline-block;margin-right:8px;padding:1px 5px;font-size:12px;line-height:1.5;color:#0f766e;background:#ccfbf1;border-radius:2px;">精选</span>${link(article, "", "font-size:15px;line-height:1.7;color:#0f766e;text-decoration:none;")}</p>`,
           )
           .join("") +
         end
@@ -95,7 +116,7 @@
         items
           .map(
             (article) =>
-              `<p style="margin:0;padding:11px 0;border-bottom:1px solid #d1d5db;">${link(article, "→", "font-size:15px;line-height:1.7;color:#111827;text-decoration:none;")}</p>`,
+              `<p style="margin:0;padding:11px 0;border-bottom:1px solid #d1d5db;"><span style="display:inline-block;width:90%;vertical-align:top;">${link(article, "", "font-size:15px;line-height:1.7;color:#111827;text-decoration:none;")}</span><span style="display:inline-block;width:10%;text-align:right;vertical-align:top;color:#64748b;">→</span></p>`,
           )
           .join("") +
         end
@@ -130,6 +151,7 @@
     safeUrl,
     TEMPLATE_IDS,
     escapeHtml,
+    safeRecommendationUrl,
     buildRecommendationHtml,
   };
 });
