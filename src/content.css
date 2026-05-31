@@ -253,6 +253,10 @@
   background: #115e59;
 }
 
+.sewa-import-submit {
+  width: 100%;
+}
+
 .sewa-primary-button:disabled,
 .sewa-secondary-button:disabled,
 .sewa-add-button:disabled {

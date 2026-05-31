@@ -37,6 +37,15 @@ test("content panel exposes the three requested workflows", () => {
   }
 });
 
+test("HTML import action stays visible before the long preview area", () => {
+  const content = read("src/content.js");
+  const action = content.indexOf('data-sewa-action="import-html"');
+  const preview = content.indexOf('title="HTML 导入预览"');
+  assert.notEqual(action, -1);
+  assert.notEqual(preview, -1);
+  assert.ok(action < preview, "导入正文按钮必须放在预览框之前");
+});
+
 test("local preview provides five official-shaped article links", () => {
   const preview = read("preview.html");
   const links =
