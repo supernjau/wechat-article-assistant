@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "公众号文章助手",
+  "version": "0.1.0",
+  "description": "为微信公众号官方编辑器提供 HTML 导入、关键词强调和往期推荐模板。",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://mp.weixin.qq.com/*"],
+  "action": {
+    "default_title": "公众号文章助手",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mp.weixin.qq.com/*"],
+      "js": ["src/core.js", "src/editor-adapter.js", "src/content.js"],
+      "css": ["src/content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
