@@ -18,7 +18,11 @@
   function safeUrl(value) {
     const url = String(value || "").trim();
     const normalized = url.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
-    return /^(?:javascript|data|vbscript):/i.test(normalized) ? "" : url;
+    return /^(?:javascript|data|vbscript|file|filesystem|intent|blob):/i.test(
+      normalized,
+    )
+      ? ""
+      : url;
   }
 
   const TEMPLATE_IDS = [

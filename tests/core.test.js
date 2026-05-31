@@ -17,6 +17,9 @@ test("safeUrl blocks script URLs and keeps normal article URLs", () => {
   assert.equal(Core.safeUrl("java\rscript:alert(1)"), "");
   assert.equal(Core.safeUrl(" DATA:text/html,<p>bad</p> "), "");
   assert.equal(Core.safeUrl("vbscript:msgbox(1)"), "");
+  assert.equal(Core.safeUrl("file:///tmp/private.html"), "");
+  assert.equal(Core.safeUrl("intent://scan/#Intent;scheme=zxing;end"), "");
+  assert.equal(Core.safeUrl("blob:https://example.com/demo"), "");
   assert.equal(
     Core.safeUrl(" https://mp.weixin.qq.com/s/example "),
     "https://mp.weixin.qq.com/s/example",
