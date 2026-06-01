@@ -14,11 +14,27 @@ test("manifest references extension resources that exist", () => {
   const referenced = [
     manifest.action.default_popup,
     ...manifest.content_scripts.flatMap((entry) => [...entry.js, ...entry.css]),
+    ...manifest.web_accessible_resources.flatMap((entry) => entry.resources),
   ];
   for (const file of referenced) {
     assert.equal(fs.existsSync(path.join(root, file)), true, `${file} is missing`);
   }
   assert.deepEqual(manifest.permissions, ["storage"]);
+});
+
+test("official editor writes go through the page-level MP editor bridge", () => {
+  const adapter = read("src/editor-adapter.js");
+  const bridge = read("src/page-bridge.js");
+  const content = read("src/content.js");
+
+  assert.match(adapter, /src\/page-bridge\.js/);
+  assert.match(adapter, /mp_editor_set_content/);
+  assert.match(adapter, /mp_editor_get_content/);
+  assert.match(adapter, /mp_editor_insert_html/);
+  assert.match(bridge, /__MP_Editor_JSAPI__/);
+  assert.match(bridge, /api\.invoke/);
+  assert.match(content, /async function handleImport/);
+  assert.match(content, /await EditorAdapter\.replaceHtml/);
 });
 
 test("content panel exposes the three requested workflows", () => {

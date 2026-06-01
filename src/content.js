@@ -254,7 +254,7 @@
     }
   }
 
-  function handleImport() {
+  async function handleImport() {
     try {
       const html = sanitizedImportHtml();
       if (!html.trim()) {
@@ -263,15 +263,15 @@
       }
       if (
         state.importMode === "replace" &&
-        EditorAdapter.getHtml().trim() &&
+        (await EditorAdapter.getHtml()).trim() &&
         !root.confirm("覆盖当前正文？原有正文将被替换。")
       ) {
         return;
       }
       const result =
         state.importMode === "cursor"
-          ? EditorAdapter.insertHtml(html)
-          : EditorAdapter.replaceHtml(html);
+          ? await EditorAdapter.insertHtml(html)
+          : await EditorAdapter.replaceHtml(html);
       showStatus(result ? "HTML 已写入正文。" : "没有可写入的正文内容。", result ? "success" : "error");
     } catch (error) {
       showStatus(error.message, "error");
@@ -547,7 +547,7 @@
     renderRecommendationPreview();
   }
 
-  function insertRecommendations() {
+  async function insertRecommendations() {
     try {
       normalizeArticles();
       if (!state.articles.length) {
@@ -564,8 +564,8 @@
       const html = Core.buildRecommendationHtml(state.templateId, state.articles);
       const result =
         state.recommendMode === "cursor"
-          ? EditorAdapter.insertHtml(html)
-          : EditorAdapter.appendHtml(html);
+          ? await EditorAdapter.insertHtml(html)
+          : await EditorAdapter.appendHtml(html);
       showStatus(result ? "往期推荐已插入正文。" : "没有可插入的推荐内容。", result ? "success" : "error");
       saveState();
     } catch (error) {

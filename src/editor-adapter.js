@@ -8,9 +8,99 @@
     "[contenteditable='true']",
   ];
   const URL_ATTRIBUTES = new Set(["href", "src", "data-src", "xlink:href"]);
+  const REQUEST_TYPE = "SEWA_MP_EDITOR_REQUEST";
+  const RESPONSE_TYPE = "SEWA_MP_EDITOR_RESPONSE";
+  const REQUEST_TIMEOUT = 5000;
 
   let rememberedEditor = null;
   let rememberedRange = null;
+  let pageBridgePromise = null;
+  let requestSequence = 0;
+  const pendingRequests = new Map();
+
+  function isOfficialEditorPage() {
+    return Boolean(
+      root.location &&
+        root.location.hostname === "mp.weixin.qq.com" &&
+        /\/cgi-bin\/appmsg/.test(root.location.pathname),
+    );
+  }
+
+  function injectPageBridge() {
+    if (!isOfficialEditorPage()) return Promise.resolve(false);
+    if (pageBridgePromise) return pageBridgePromise;
+    if (
+      !root.chrome ||
+      !root.chrome.runtime ||
+      typeof root.chrome.runtime.getURL !== "function"
+    ) {
+      throw new Error("无法加载公众号编辑器桥接脚本，请重新加载扩展后再试。");
+    }
+    pageBridgePromise = new Promise((resolve, reject) => {
+      const script = root.document.createElement("script");
+      script.id = "sewa-mp-editor-bridge";
+      script.src = root.chrome.runtime.getURL("src/page-bridge.js");
+      script.addEventListener("load", () => {
+        script.remove();
+        resolve(true);
+      });
+      script.addEventListener("error", () => {
+        script.remove();
+        pageBridgePromise = null;
+        reject(new Error("公众号编辑器桥接脚本加载失败，请重新加载扩展。"));
+      });
+      (root.document.head || root.document.documentElement).append(script);
+    });
+    return pageBridgePromise;
+  }
+
+  async function requestOfficialEditor(apiName, apiParam) {
+    await injectPageBridge();
+    const id = `sewa-${Date.now()}-${requestSequence += 1}`;
+
+    return new Promise((resolve, reject) => {
+      const timeout = root.setTimeout(() => {
+        pendingRequests.delete(id);
+        reject(
+          new Error("公众号编辑器响应超时，请刷新文章编辑页后重新导入。"),
+        );
+      }, REQUEST_TIMEOUT);
+
+      pendingRequests.set(id, { resolve, reject, timeout });
+      root.postMessage(
+        {
+          source: "SEWA_CONTENT_SCRIPT",
+          type: REQUEST_TYPE,
+          id,
+          apiName,
+          apiParam: apiParam || {},
+        },
+        "*",
+      );
+    });
+  }
+
+  root.addEventListener("message", (event) => {
+    const message = event.data;
+    if (
+      event.source !== root ||
+      !message ||
+      message.source !== "SEWA_PAGE_BRIDGE" ||
+      message.type !== RESPONSE_TYPE ||
+      !pendingRequests.has(message.id)
+    ) {
+      return;
+    }
+
+    const pending = pendingRequests.get(message.id);
+    pendingRequests.delete(message.id);
+    root.clearTimeout(pending.timeout);
+    if (message.ok) {
+      pending.resolve(message.result);
+    } else {
+      pending.reject(new Error(message.error || "公众号编辑器写入失败。"));
+    }
+  });
 
   function isInsideSewaUi(element) {
     return Boolean(
@@ -183,11 +273,18 @@
     editor.dispatchEvent(new EventConstructor("change", { bubbles: true }));
   }
 
-  function replaceHtml(html) {
+  async function replaceHtml(html) {
+    const sanitized = sanitizeHtml(html);
+    if (!sanitized.trim()) return false;
+    if (isOfficialEditorPage()) {
+      await requestOfficialEditor("mp_editor_set_content", {
+        content: sanitized,
+      });
+      return true;
+    }
+
     const editor = requireEditor();
     const snapshot = editor.innerHTML;
-    const sanitized = sanitizeHtml(html);
-
     try {
       editor.innerHTML = sanitized;
       dispatchWriteEvents(editor);
@@ -228,9 +325,16 @@
     return { range, selection };
   }
 
-  function insertHtml(html) {
+  async function insertHtml(html) {
     const sanitized = sanitizeHtml(html);
     if (!sanitized.trim()) return false;
+    if (isOfficialEditorPage()) {
+      await requestOfficialEditor("mp_editor_insert_html", {
+        html: sanitized,
+        isSelect: false,
+      });
+      return true;
+    }
 
     const editor = requireEditor();
     const { range, selection } = restoreRememberedRange(editor);
@@ -266,9 +370,16 @@
     return true;
   }
 
-  function appendHtml(html) {
+  async function appendHtml(html) {
     const sanitized = sanitizeHtml(html);
     if (!sanitized.trim()) return false;
+    if (isOfficialEditorPage()) {
+      const current = await getHtml();
+      await requestOfficialEditor("mp_editor_set_content", {
+        content: `${current}${sanitized}`,
+      });
+      return true;
+    }
 
     const editor = requireEditor();
     const range = editor.ownerDocument.createRange();
@@ -279,7 +390,21 @@
     return true;
   }
 
-  function getHtml() {
+  async function getHtml() {
+    if (isOfficialEditorPage()) {
+      const result = await requestOfficialEditor("mp_editor_get_content");
+      if (typeof result === "string") return result;
+      if (result && typeof result.content === "string") return result.content;
+      if (
+        result &&
+        result.data &&
+        typeof result.data.content === "string"
+      ) {
+        return result.data.content;
+      }
+      if (result && typeof result.html === "string") return result.html;
+      throw new Error("公众号编辑器返回了无法识别的正文格式。");
+    }
     return requireEditor().innerHTML;
   }
 

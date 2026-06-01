@@ -3,6 +3,6 @@
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "check": "node -e \"const { existsSync, readFileSync } = require('node:fs'); const { execFileSync } = require('node:child_process'); JSON.parse(readFileSync('manifest.json', 'utf8')); for (const file of ['src/core.js', 'src/editor-adapter.js', 'src/content.js', 'popup.js']) if (existsSync(file)) execFileSync(process.execPath, ['--check', file], { stdio: 'inherit' }); console.log('manifest JSON valid; existing scripts syntax valid');\""
+    "check": "node -e \"const { existsSync, readFileSync } = require('node:fs'); const { execFileSync } = require('node:child_process'); JSON.parse(readFileSync('manifest.json', 'utf8')); for (const file of ['src/core.js', 'src/editor-adapter.js', 'src/page-bridge.js', 'src/content.js', 'popup.js']) if (existsSync(file)) execFileSync(process.execPath, ['--check', file], { stdio: 'inherit' }); console.log('manifest JSON valid; existing scripts syntax valid');\""
   }
 }
