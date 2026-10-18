@@ -15,6 +15,43 @@
     ].sort((a, b) => b.length - a.length);
   }
 
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // 按文本顺序规划关键词强调：返回每段文本里要标记的区间，以及每个词的命中统计。
+  // total 是全文命中次数，marked 是实际会被标记的次数（firstOnly 时每个词最多 1 次）。
+  function planKeywordMatches(texts, terms, options) {
+    const firstOnly = Boolean(options && options.firstOnly);
+    const entries = new Map();
+    for (const term of Array.isArray(terms) ? terms : []) {
+      const key = String(term || "").toLowerCase();
+      if (key && !entries.has(key)) entries.set(key, { term, total: 0, marked: 0 });
+    }
+    const list = Array.isArray(texts) ? texts : [];
+    const ranges = list.map(() => []);
+    if (!entries.size) return { ranges, counts: [] };
+    const regex = new RegExp(
+      [...entries.values()]
+        .map((entry) => entry.term)
+        .sort((a, b) => b.length - a.length)
+        .map(escapeRegExp)
+        .join("|"),
+      "gi",
+    );
+    list.forEach((text, index) => {
+      for (const match of String(text || "").matchAll(regex)) {
+        const entry = entries.get(match[0].toLowerCase());
+        if (!entry) continue;
+        entry.total += 1;
+        if (firstOnly && entry.marked) continue;
+        entry.marked += 1;
+        ranges[index].push({ start: match.index, end: match.index + match[0].length });
+      }
+    });
+    return { ranges, counts: [...entries.values()] };
+  }
+
   function safeUrl(value) {
     const url = String(value || "").trim();
     const normalized = url.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
@@ -219,6 +256,7 @@
 
   return {
     parseKeywords,
+    planKeywordMatches,
     safeUrl,
     TEMPLATE_IDS,
     escapeHtml,

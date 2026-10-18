@@ -178,6 +178,7 @@
 }
 
 .sewa-textarea,
+.sewa-select,
 .sewa-input {
   width: 100%;
   border: 1px solid #cbd5e1;
@@ -204,6 +205,7 @@
 }
 
 .sewa-textarea:focus,
+.sewa-select:focus,
 .sewa-input:focus {
   border-color: #0f766e;
   box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.12);
@@ -258,6 +260,34 @@
   visibility: visible !important;
   -webkit-appearance: none !important;
   appearance: none !important;
+}
+
+.sewa-panel button.sewa-secondary-button,
+.sewa-panel button.sewa-add-button {
+  display: inline-flex !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #334155 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+.sewa-panel button.sewa-secondary-button:hover,
+.sewa-panel button.sewa-add-button:hover {
+  border-color: #0f766e !important;
+  color: #0f766e !important;
+}
+
+.sewa-panel button.sewa-secondary-button:disabled,
+.sewa-panel button.sewa-add-button:disabled {
+  border-color: #e2e8f0 !important;
+  background: #f8fafc !important;
+  background-color: #f8fafc !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed;
 }
 
 .sewa-panel button.sewa-primary-button:hover {
@@ -495,4 +525,51 @@
     bottom: 8px;
     max-width: calc(100vw - 16px);
   }
+}
+
+.sewa-select {
+  display: block;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.sewa-keyword-set-name {
+  margin-bottom: 8px;
+}
+
+.sewa-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sewa-hit-summary {
+  margin: 0 0 6px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sewa-hit-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid #eef2f7;
+  color: #475569;
+  font-size: 12px;
+}
+
+.sewa-hit-row.is-zero {
+  color: #b45309;
+}
+
+.sewa-hit-term {
+  overflow-wrap: anywhere;
+  font-weight: 600;
 }

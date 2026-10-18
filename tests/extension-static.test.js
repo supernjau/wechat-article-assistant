@@ -102,3 +102,39 @@ test("recent articles load from the publish-list API with DOM fallback and no ma
   assert.match(content, /return scrapeRecentArticles\(\)/);
   assert.doesNotMatch(content, /data-sewa-action="open-links"/);
 });
+
+test("keyword highlight panel offers keyword sets, first-only toggle and live hit counts", () => {
+  const content = read("src/content.js");
+  for (const action of ["save-keyword-set", "delete-keyword-set"]) {
+    assert.match(content, new RegExp(`data-sewa-action="${action}"`));
+  }
+  assert.match(content, /sewa-first-only/);
+  assert.match(content, /sewa-keyword-hits/);
+  assert.match(content, /Core\.planKeywordMatches/);
+  assert.match(content, /keywordSets: state\.keywordSets/);
+});
+
+test("secondary and add buttons also resist host-page button style overrides", () => {
+  const css = read("src/content.css");
+  assert.match(css, /\.sewa-panel button\.sewa-secondary-button,\s*\.sewa-panel button\.sewa-add-button\s*\{/);
+  assert.match(css, /border:\s*1px solid #cbd5e1\s*!important/);
+});
+
+test("highlight apply and remove write through the official editor API instead of mutating page DOM", () => {
+  const content = read("src/content.js");
+  const adapter = read("src/editor-adapter.js");
+  assert.match(content, /async function transformBody/);
+  assert.match(content, /await EditorAdapter\.setContent\(/);
+  assert.match(content, /async function applyHighlights/);
+  assert.match(content, /async function handleRemoveHighlights/);
+  assert.match(adapter, /async function setContent/);
+  assert.match(adapter, /mp_editor_set_content/);
+});
+
+test("highlight marks are recognised by key styles because the official editor strips custom attributes", () => {
+  const content = read("src/content.js");
+  assert.match(content, /function isHighlightMark/);
+  assert.match(content, /HIGHLIGHT_KEY_STYLES/);
+  assert.match(content, /background-color:#fff1a8/);
+  assert.match(content, /filter\(isHighlightMark\)/);
+});

@@ -264,3 +264,68 @@ test("parsePublishedArticles reads nested publish_page JSON and skips deleted ar
   assert.deepEqual(Core.parsePublishedArticles(null), []);
   assert.deepEqual(Core.parsePublishedArticles({ publish_page: "oops" }), []);
 });
+
+test("planKeywordMatches marks every match and counts hits per keyword", () => {
+  const plan = Core.planKeywordMatches(
+    ["This is suitable. Fit or fit?", "More SUITABLE words"],
+    ["suitable", "fit", "appropriate"],
+  );
+
+  assert.deepEqual(plan.counts, [
+    { term: "suitable", total: 2, marked: 2 },
+    { term: "fit", total: 2, marked: 2 },
+    { term: "appropriate", total: 0, marked: 0 },
+  ]);
+  assert.deepEqual(plan.ranges, [
+    [
+      { start: 8, end: 16 },
+      { start: 18, end: 21 },
+      { start: 25, end: 28 },
+    ],
+    [{ start: 5, end: 13 }],
+  ]);
+});
+
+test("planKeywordMatches firstOnly marks only the earliest match of each keyword, ignoring case", () => {
+  const plan = Core.planKeywordMatches(
+    ["a Fit b", "fit again", "FIT and suitable", "suitable"],
+    ["suitable", "fit"],
+    { firstOnly: true },
+  );
+
+  assert.deepEqual(plan.counts, [
+    { term: "suitable", total: 2, marked: 1 },
+    { term: "fit", total: 3, marked: 1 },
+  ]);
+  assert.deepEqual(plan.ranges, [
+    [{ start: 2, end: 5 }],
+    [],
+    [{ start: 8, end: 16 }],
+    [],
+  ]);
+});
+
+test("planKeywordMatches prefers the longest keyword and merges keywords that differ only by case", () => {
+  const plan = Core.planKeywordMatches(["fitness fit"], ["fitness", "fit", "Fit"]);
+
+  assert.deepEqual(plan.counts, [
+    { term: "fitness", total: 1, marked: 1 },
+    { term: "fit", total: 1, marked: 1 },
+  ]);
+  assert.deepEqual(plan.ranges, [
+    [
+      { start: 0, end: 7 },
+      { start: 8, end: 11 },
+    ],
+  ]);
+});
+
+test("planKeywordMatches treats regex characters literally and handles empty input", () => {
+  assert.deepEqual(Core.planKeywordMatches(["a.b axb"], ["a.b"]).ranges, [
+    [{ start: 0, end: 3 }],
+  ]);
+  assert.deepEqual(Core.planKeywordMatches(["text"], []), {
+    ranges: [[]],
+    counts: [],
+  });
+});

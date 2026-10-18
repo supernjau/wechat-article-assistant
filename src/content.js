@@ -18,6 +18,13 @@
     underline:
       "color:#1d4ed8;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;",
   };
+  // 官方编辑器写回正文时会去掉自定义属性、改写样式（如丢掉 padding），
+  // 所以按每种强调的“关键声明”（浏览器标准化后比较）识别本插件加的标记。
+  const HIGHLIGHT_KEY_STYLES = [
+    "background-color:#fff1a8",
+    "color:#c24141",
+    "color:#1d4ed8",
+  ];
   const TEMPLATE_LABELS = {
     clean: "清爽列表",
     numbered: "数字目录",
@@ -32,6 +39,8 @@
     importHtml: "",
     highlightTerms: "",
     highlightStyle: "marker",
+    highlightFirstOnly: false,
+    keywordSets: [],
     articles: [],
     templateId: "clean",
     recommendMode: "append",
@@ -64,6 +73,18 @@
         highlightStyle: HIGHLIGHT_STYLES[saved.highlightStyle]
           ? saved.highlightStyle
           : "marker",
+        highlightFirstOnly: saved.highlightFirstOnly === true,
+        keywordSets: Array.isArray(saved.keywordSets)
+          ? saved.keywordSets
+              .filter(
+                (set) =>
+                  set &&
+                  typeof set.name === "string" &&
+                  set.name.trim() &&
+                  typeof set.terms === "string",
+              )
+              .map((set) => ({ name: set.name.trim(), terms: set.terms }))
+          : [],
         articles: Array.isArray(saved.articles) ? saved.articles.slice(0, 5) : [],
         templateId: Core.TEMPLATE_IDS.includes(saved.templateId)
           ? saved.templateId
@@ -80,6 +101,8 @@
       importMode: state.importMode,
       highlightTerms: state.highlightTerms,
       highlightStyle: state.highlightStyle,
+      highlightFirstOnly: state.highlightFirstOnly,
+      keywordSets: state.keywordSets,
       articles: state.articles.slice(0, 5),
       templateId: state.templateId,
       recommendMode: state.recommendMode,
@@ -149,6 +172,20 @@
           <textarea class="sewa-textarea sewa-highlight-terms" rows="6" placeholder="例如：suitable, appropriate"></textarea>
         </label>
         <div class="sewa-field">
+          <span class="sewa-label">词库</span>
+          <select class="sewa-select sewa-keyword-set-select" aria-label="选择已保存的词库"></select>
+          <input class="sewa-input sewa-keyword-set-name" placeholder="词库名称，例如：外贸英语词汇" aria-label="词库名称">
+          <div class="sewa-button-row">
+            <button type="button" class="sewa-secondary-button" data-sewa-action="save-keyword-set">保存当前为词库</button>
+            <button type="button" class="sewa-secondary-button" data-sewa-action="delete-keyword-set">删除词库</button>
+          </div>
+        </div>
+        <label class="sewa-check"><input type="checkbox" class="sewa-first-only"><span>只强调每个词第一次出现</span></label>
+        <div class="sewa-field">
+          <span class="sewa-label">正文命中</span>
+          <div class="sewa-keyword-hits" aria-live="polite"></div>
+        </div>
+        <div class="sewa-field">
           <span class="sewa-label">强调样式</span>
           <div class="sewa-style-options">
             <label class="sewa-style-choice"><input type="radio" name="sewa-highlight-style" value="marker" checked><span class="sewa-marker-sample">黄色标记</span></label>
@@ -196,6 +233,10 @@
   const importCode = panel.querySelector(".sewa-import-code");
   const importPreview = panel.querySelector(".sewa-import-preview");
   const highlightTerms = panel.querySelector(".sewa-highlight-terms");
+  const keywordSetSelect = panel.querySelector(".sewa-keyword-set-select");
+  const keywordSetName = panel.querySelector(".sewa-keyword-set-name");
+  const firstOnlyCheckbox = panel.querySelector(".sewa-first-only");
+  const keywordHits = panel.querySelector(".sewa-keyword-hits");
   const articleList = panel.querySelector(".sewa-article-list");
   const templateGrid = panel.querySelector(".sewa-template-grid");
   const recommendPreview = panel.querySelector(".sewa-recommend-preview");
@@ -221,6 +262,7 @@
     if (editor) watchSelection(editor.ownerDocument);
     renderImportPreview();
     renderRecommendations();
+    scheduleKeywordHits();
   }
 
   function closePanel() {
@@ -237,6 +279,7 @@
       view.classList.toggle("is-active", view.dataset.sewaView === tabName);
     }
     if (tabName === "recommend") renderRecommendations();
+    if (tabName === "highlight") scheduleKeywordHits();
   }
 
   function sanitizedImportHtml() {
@@ -277,93 +320,233 @@
     }
   }
 
-  function removeHighlights(editor) {
-    const marks = Array.from(editor.querySelectorAll("[data-sewa-highlight]"));
+  function isHighlightMark(element) {
+    if (!element || element.tagName !== "SPAN") return false;
+    if (element.hasAttribute("data-sewa-highlight")) return true;
+    if (!element.hasAttribute("style")) return false;
+    if (!Array.from(element.childNodes).every((node) => node.nodeType === 3)) {
+      return false;
+    }
+    return HIGHLIGHT_KEY_STYLES.some((css) => {
+      const probe = element.ownerDocument.createElement("span");
+      probe.style.cssText = css;
+      return (
+        probe.style.length > 0 &&
+        Array.from(probe.style).every(
+          (property) =>
+            element.style.getPropertyValue(property) ===
+            probe.style.getPropertyValue(property),
+        )
+      );
+    });
+  }
+
+  function removeHighlights(container) {
+    const marks = Array.from(container.querySelectorAll("span")).filter(isHighlightMark);
     for (const mark of marks) mark.replaceWith(...Array.from(mark.childNodes));
-    editor.normalize();
-    if (marks.length) dispatchEditorEvents(editor);
+    container.normalize();
     return marks.length;
   }
 
-  function escapeRegExp(value) {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // 官方编辑器不认直接改页面元素：取出正文 HTML，在内存里改完，再经官方接口写回。
+  async function transformBody(transform) {
+    if (EditorAdapter.isOfficialEditorPage()) {
+      const html = await EditorAdapter.getHtml();
+      const body = new root.DOMParser().parseFromString(
+        `<body>${html}</body>`,
+        "text/html",
+      ).body;
+      const result = transform(body);
+      if (result.changed) await EditorAdapter.setContent(body.innerHTML);
+      return result;
+    }
+    const editor = EditorAdapter.findEditor();
+    if (!editor) throw new Error("未找到公众号正文编辑器。");
+    const result = transform(editor);
+    if (result.changed) dispatchEditorEvents(editor);
+    return result;
   }
 
-  function applyHighlights() {
+  function collectTextNodes(editor) {
+    const skipTags = ["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA"];
+    const NodeFilter =
+      (editor.ownerDocument.defaultView &&
+        editor.ownerDocument.defaultView.NodeFilter) ||
+      root.NodeFilter;
+    const walker = editor.ownerDocument.createTreeWalker(
+      editor,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          const parent = node.parentElement;
+          if (!parent || !node.nodeValue || !node.nodeValue.trim()) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return skipTags.some((tag) => parent.closest(tag))
+            ? NodeFilter.FILTER_REJECT
+            : NodeFilter.FILTER_ACCEPT;
+        },
+      },
+    );
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    return nodes;
+  }
+
+  function highlightIn(container, terms) {
+    const removed = removeHighlights(container);
+    const nodes = collectTextNodes(container);
+    const plan = Core.planKeywordMatches(
+      nodes.map((node) => node.nodeValue),
+      terms,
+      { firstOnly: state.highlightFirstOnly },
+    );
+    let count = 0;
+    nodes.forEach((node, index) => {
+      const ranges = plan.ranges[index];
+      if (!ranges.length) return;
+      const text = node.nodeValue;
+      const fragment = container.ownerDocument.createDocumentFragment();
+      let lastIndex = 0;
+      for (const { start, end } of ranges) {
+        if (start > lastIndex) fragment.append(text.slice(lastIndex, start));
+        const mark = container.ownerDocument.createElement("span");
+        mark.dataset.sewaHighlight = "1";
+        mark.setAttribute("style", HIGHLIGHT_STYLES[state.highlightStyle]);
+        mark.textContent = text.slice(start, end);
+        fragment.append(mark);
+        lastIndex = end;
+        count += 1;
+      }
+      fragment.append(text.slice(lastIndex));
+      node.replaceWith(fragment);
+    });
+    return { count, changed: Boolean(removed || count) };
+  }
+
+  async function applyHighlights() {
     try {
-      const editor = EditorAdapter.findEditor();
-      if (!editor) throw new Error("未找到公众号正文编辑器。");
       const terms = Core.parseKeywords(state.highlightTerms);
       if (!terms.length) {
         showStatus("请先输入至少一个关键词。", "error");
         return;
       }
-      removeHighlights(editor);
-      const regex = new RegExp(terms.map(escapeRegExp).join("|"), "gi");
-      const skipTags = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA"]);
-      const NodeFilter =
-        (editor.ownerDocument.defaultView &&
-          editor.ownerDocument.defaultView.NodeFilter) ||
-        root.NodeFilter;
-      const walker = editor.ownerDocument.createTreeWalker(
-        editor,
-        NodeFilter.SHOW_TEXT,
-        {
-          acceptNode(node) {
-            const parent = node.parentElement;
-            if (!parent || !node.nodeValue || !node.nodeValue.trim()) {
-              return NodeFilter.FILTER_REJECT;
-            }
-            if (parent.closest("[data-sewa-highlight]")) {
-              return NodeFilter.FILTER_REJECT;
-            }
-            return Array.from(skipTags).some((tag) => parent.closest(tag))
-              ? NodeFilter.FILTER_REJECT
-              : NodeFilter.FILTER_ACCEPT;
-          },
-        },
-      );
-      const nodes = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode);
-      let count = 0;
-      for (const node of nodes) {
-        const text = node.nodeValue;
-        regex.lastIndex = 0;
-        if (!regex.test(text)) continue;
-        regex.lastIndex = 0;
-        const fragment = editor.ownerDocument.createDocumentFragment();
-        let lastIndex = 0;
-        for (const match of text.matchAll(regex)) {
-          if (match.index > lastIndex) {
-            fragment.append(text.slice(lastIndex, match.index));
-          }
-          const mark = editor.ownerDocument.createElement("span");
-          mark.dataset.sewaHighlight = "1";
-          mark.setAttribute("style", HIGHLIGHT_STYLES[state.highlightStyle]);
-          mark.textContent = match[0];
-          fragment.append(mark);
-          lastIndex = match.index + match[0].length;
-          count += 1;
-        }
-        fragment.append(text.slice(lastIndex));
-        node.replaceWith(fragment);
-      }
-      if (count) dispatchEditorEvents(editor);
+      const { count } = await transformBody((container) => highlightIn(container, terms));
       showStatus(count ? `已强调 ${count} 处关键词。` : "正文中没有找到这些关键词。", count ? "success" : "error");
       saveState();
+      scheduleKeywordHits();
     } catch (error) {
       showStatus(error.message, "error");
     }
   }
 
-  function handleRemoveHighlights() {
-    const editor = EditorAdapter.findEditor();
-    if (!editor) {
-      showStatus("未找到公众号正文编辑器。", "error");
+  function refreshKeywordHits() {
+    const terms = Core.parseKeywords(state.highlightTerms);
+    if (!terms.length) {
+      keywordHits.innerHTML = '<p class="sewa-empty">输入关键词后，这里显示每个词在正文里命中几处。</p>';
       return;
     }
-    const count = removeHighlights(editor);
-    showStatus(count ? `已移除 ${count} 处插件强调。` : "正文中没有本插件添加的强调。", count ? "success" : "");
+    const editor = EditorAdapter.findEditor();
+    if (!editor) {
+      keywordHits.innerHTML = '<p class="sewa-empty">未找到公众号正文编辑器。</p>';
+      return;
+    }
+    // 已应用的强调也要统计，所以带标记的文本也计入。
+    const plan = Core.planKeywordMatches(
+      collectTextNodes(editor).map((node) => node.nodeValue),
+      terms,
+      { firstOnly: state.highlightFirstOnly },
+    );
+    const marked = plan.counts.reduce((sum, item) => sum + item.marked, 0);
+    keywordHits.innerHTML =
+      `<p class="sewa-hit-summary">应用后将强调 ${marked} 处</p>` +
+      plan.counts
+        .map((item) => {
+          const note =
+            state.highlightFirstOnly && item.total > 1
+              ? `${item.total} 处（只强调第 1 处）`
+              : `${item.total} 处`;
+          return `<div class="sewa-hit-row${item.total ? "" : " is-zero"}"><span class="sewa-hit-term">${escape(item.term)}</span><span>${item.total ? note : "0 处，请检查拼写"}</span></div>`;
+        })
+        .join("");
+  }
+
+  let keywordHitsTimer = 0;
+  function scheduleKeywordHits() {
+    root.clearTimeout(keywordHitsTimer);
+    keywordHitsTimer = root.setTimeout(refreshKeywordHits, 200);
+  }
+
+  function renderKeywordSets() {
+    keywordSetSelect.innerHTML =
+      '<option value="">选择已保存的词库</option>' +
+      state.keywordSets
+        .map(
+          (set, index) =>
+            `<option value="${index}">${escape(set.name)}（${Core.parseKeywords(set.terms).length} 个词）</option>`,
+        )
+        .join("");
+  }
+
+  function saveKeywordSet() {
+    const name = keywordSetName.value.trim();
+    if (!name) {
+      showStatus("请先填写词库名称。", "error");
+      return;
+    }
+    const count = Core.parseKeywords(state.highlightTerms).length;
+    if (!count) {
+      showStatus("请先输入至少一个关键词再保存。", "error");
+      return;
+    }
+    const existing = state.keywordSets.findIndex((set) => set.name === name);
+    const set = { name, terms: state.highlightTerms };
+    if (existing >= 0) state.keywordSets[existing] = set;
+    else state.keywordSets.push(set);
+    renderKeywordSets();
+    keywordSetSelect.value = String(existing >= 0 ? existing : state.keywordSets.length - 1);
+    saveState();
+    showStatus(
+      `${existing >= 0 ? "已更新" : "已保存"}词库“${name}”（${count} 个关键词）。`,
+      "success",
+    );
+  }
+
+  function chooseKeywordSet() {
+    const set = state.keywordSets[Number(keywordSetSelect.value)];
+    if (!set || keywordSetSelect.value === "") return;
+    state.highlightTerms = set.terms;
+    highlightTerms.value = set.terms;
+    keywordSetName.value = set.name;
+    saveState();
+    refreshKeywordHits();
+  }
+
+  function deleteKeywordSet() {
+    const set = state.keywordSets[Number(keywordSetSelect.value)];
+    if (!set || keywordSetSelect.value === "") {
+      showStatus("请先在下拉框里选择要删除的词库。", "error");
+      return;
+    }
+    if (!root.confirm(`删除词库“${set.name}”？`)) return;
+    state.keywordSets.splice(Number(keywordSetSelect.value), 1);
+    renderKeywordSets();
+    if (keywordSetName.value.trim() === set.name) keywordSetName.value = "";
+    saveState();
+    showStatus(`已删除词库“${set.name}”。`, "success");
+  }
+
+  async function handleRemoveHighlights() {
+    try {
+      const { count } = await transformBody((container) => {
+        const removed = removeHighlights(container);
+        return { count: removed, changed: removed > 0 };
+      });
+      scheduleKeywordHits();
+      showStatus(count ? `已移除 ${count} 处插件强调。` : "正文中没有本插件添加的强调。", count ? "success" : "");
+    } catch (error) {
+      showStatus(error.message, "error");
+    }
   }
 
   function isVisible(element) {
@@ -653,6 +836,8 @@
     if (action === "import-html") handleImport();
     if (action === "apply-highlight") applyHighlights();
     if (action === "remove-highlight") handleRemoveHighlights();
+    if (action === "save-keyword-set") saveKeywordSet();
+    if (action === "delete-keyword-set") deleteKeywordSet();
     if (action === "scrape-articles") {
       readRecentArticles();
     }
@@ -672,6 +857,7 @@
     if (event.target === highlightTerms) {
       state.highlightTerms = highlightTerms.value;
       saveState();
+      scheduleKeywordHits();
     }
     const article = event.target.closest("[data-sewa-index]");
     const field = event.target.dataset.sewaArticleField;
@@ -691,6 +877,12 @@
       state.highlightStyle = event.target.value;
       saveState();
     }
+    if (event.target === firstOnlyCheckbox) {
+      state.highlightFirstOnly = firstOnlyCheckbox.checked;
+      saveState();
+      refreshKeywordHits();
+    }
+    if (event.target === keywordSetSelect) chooseKeywordSet();
     if (event.target.name === "sewa-recommend-mode") {
       state.recommendMode = event.target.value;
       saveState();
@@ -742,6 +934,8 @@
   loadState().then(() => {
     importCode.value = state.importHtml;
     highlightTerms.value = state.highlightTerms;
+    firstOnlyCheckbox.checked = state.highlightFirstOnly;
+    renderKeywordSets();
     const importMode = panel.querySelector(
       `input[name="sewa-import-mode"][value="${state.importMode}"]`,
     );

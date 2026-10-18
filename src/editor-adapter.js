@@ -370,6 +370,19 @@
     return true;
   }
 
+  // 原样写回正文（不做净化）：用于改写从编辑器取出的正文，避免丢掉原有内容。
+  async function setContent(html) {
+    const content = String(html || "");
+    if (isOfficialEditorPage()) {
+      await requestOfficialEditor("mp_editor_set_content", { content });
+      return true;
+    }
+    const editor = requireEditor();
+    editor.innerHTML = content;
+    dispatchWriteEvents(editor);
+    return true;
+  }
+
   async function appendHtml(html) {
     const sanitized = sanitizeHtml(html);
     if (!sanitized.trim()) return false;
@@ -410,12 +423,14 @@
 
   root.SEWA = root.SEWA || {};
   root.SEWA.EditorAdapter = {
+    isOfficialEditorPage,
     findEditor,
     rememberSelection,
     sanitizeHtml,
     replaceHtml,
     insertHtml,
     appendHtml,
+    setContent,
     getHtml,
   };
 })(window);
