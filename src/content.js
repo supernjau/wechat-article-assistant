@@ -163,9 +163,8 @@
       </section>
 
       <section class="sewa-view" data-sewa-view="recommend">
-        <p class="sewa-hint">先打开官方“超链接”窗口，再读取最近文章。读取后可在这里校正。</p>
+        <p class="sewa-hint">点击“读取最近文章”即可自动获取最近发表的文章，读取后可在这里校正。</p>
         <div class="sewa-button-row">
-          <button type="button" class="sewa-secondary-button" data-sewa-action="open-links">打开超链接入口</button>
           <button type="button" class="sewa-primary-button" data-sewa-action="scrape-articles">读取最近文章</button>
         </div>
         <div class="sewa-article-list"></div>
@@ -468,24 +467,43 @@
     return Core.collectRecentArticles(candidates, 5);
   }
 
-  function openOfficialLinkPicker() {
-    const controls = Array.from(
-      root.document.querySelectorAll("button,a,[role='button']"),
-    ).filter(
-      (control) =>
-        isVisible(control) && !control.closest(".sewa-panel,.sewa-launcher"),
-    );
-    const target = controls.find((control) =>
-      /超链接|插入链接/.test(
-        `${control.textContent || ""} ${control.title || ""} ${control.getAttribute("aria-label") || ""}`,
-      ),
-    );
-    if (!target) {
-      showStatus("未找到官方超链接按钮，请在编辑器工具栏中手动打开。", "error");
-      return;
+  async function fetchRecentArticles() {
+    const token = new URLSearchParams(root.location.search).get("token");
+    if (!token) throw new Error("页面地址里没有 token");
+    const query = new URLSearchParams({
+      sub: "list",
+      search_field: "null",
+      begin: "0",
+      count: "10",
+      query: "",
+      fakeid: "",
+      type: "101_1",
+      free_publish_type: "1",
+      sub_action: "list_ex",
+      token,
+      lang: "zh_CN",
+      f: "json",
+      ajax: "1",
+    });
+    const response = await root.fetch(`/cgi-bin/appmsgpublish?${query}`, {
+      credentials: "include",
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (!data || !data.base_resp || data.base_resp.ret !== 0) {
+      throw new Error("接口未返回文章列表");
     }
-    target.click();
-    showStatus("已尝试打开官方超链接入口。窗口出现后点击“读取最近文章”。", "success");
+    return Core.collectRecentArticles(Core.parsePublishedArticles(data), 5);
+  }
+
+  async function loadRecentArticles() {
+    try {
+      const articles = await fetchRecentArticles();
+      if (articles.length) return articles;
+    } catch {
+      // Fall back to reading an already-open official hyperlink dialog.
+    }
+    return scrapeRecentArticles();
   }
 
   function normalizeArticles() {
@@ -521,7 +539,7 @@
             },
           )
           .join("")
-      : '<p class="sewa-empty">暂未读取文章。可从官方窗口读取，或手动添加。</p>';
+      : '<p class="sewa-empty">暂未读取文章。可点击上方按钮读取，或手动添加。</p>';
     panel.querySelector(".sewa-add-button").disabled = state.articles.length >= 5;
   }
 
@@ -573,6 +591,27 @@
     }
   }
 
+  async function readRecentArticles() {
+    showStatus("正在读取最近文章…", "success");
+    const articles = await loadRecentArticles();
+    if (!articles.length) {
+      showStatus("未读取到文章，已保留当前列表。请手动添加，或打开官方超链接窗口后再试。", "error");
+      return;
+    }
+    state.articles = articles;
+    renderRecommendations();
+    saveState();
+    const missingUrls = state.articles.filter(
+      (article) => !Core.safeRecommendationUrl(article.url),
+    ).length;
+    showStatus(
+      missingUrls
+        ? `已读取 ${state.articles.length} 篇文章，其中 ${missingUrls} 篇未提取到链接。请补充后再插入。`
+        : `已读取 ${state.articles.length} 篇文章，可在插入前校正。`,
+      missingUrls ? "error" : "success",
+    );
+  }
+
   function mutateArticle(action, index) {
     if (action === "delete-article") state.articles.splice(index, 1);
     if (action === "move-up" && index > 0) {
@@ -614,22 +653,8 @@
     if (action === "import-html") handleImport();
     if (action === "apply-highlight") applyHighlights();
     if (action === "remove-highlight") handleRemoveHighlights();
-    if (action === "open-links") openOfficialLinkPicker();
     if (action === "scrape-articles") {
-      state.articles = scrapeRecentArticles();
-      renderRecommendations();
-      saveState();
-      const missingUrls = state.articles.filter(
-        (article) => !Core.safeRecommendationUrl(article.url),
-      ).length;
-      showStatus(
-        state.articles.length
-          ? missingUrls
-            ? `已读取 ${state.articles.length} 篇文章，其中 ${missingUrls} 篇未提取到链接。请补充后再插入。`
-            : `已读取 ${state.articles.length} 篇文章，可在插入前校正。`
-          : "未读取到文章。请先打开官方超链接窗口，或手动添加。",
-        state.articles.length && !missingUrls ? "success" : "error",
-      );
+      readRecentArticles();
     }
     if (action === "add-article" && state.articles.length < 5) {
       state.articles.push({ title: "", url: "" });

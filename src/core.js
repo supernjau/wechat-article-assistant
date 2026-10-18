@@ -98,6 +98,34 @@
     return articles;
   }
 
+  const IMAGE_TEXT_SHOW_TYPE = 8;
+
+  function parseJsonField(value) {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  function parsePublishedArticles(response) {
+    const page = parseJsonField(response && response.publish_page);
+    const list = page && Array.isArray(page.publish_list) ? page.publish_list : [];
+    const candidates = [];
+    for (const entry of list) {
+      const info = parseJsonField(entry && entry.publish_info);
+      const articles = info && Array.isArray(info.appmsgex) ? info.appmsgex : [];
+      for (const article of articles) {
+        if (!article || article.is_deleted) continue;
+        // item_show_type 8 是由原文整理再发的图文，推荐原文即可。
+        if (Number(article.item_show_type) === IMAGE_TEXT_SHOW_TYPE) continue;
+        candidates.push({ title: article.title, url: article.link });
+      }
+    }
+    return candidates;
+  }
+
   function link(article, label, style) {
     const href = safeRecommendationUrl(article.url);
     const title = escapeHtml(article.title || "未命名文章");
@@ -198,6 +226,7 @@
     normalizeRecentTitle,
     pickRecentTitle,
     collectRecentArticles,
+    parsePublishedArticles,
     buildRecommendationHtml,
   };
 });

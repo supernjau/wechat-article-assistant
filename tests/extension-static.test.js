@@ -94,3 +94,11 @@ test("primary actions resist host-page button style overrides", () => {
   assert.match(css, /visibility:\s*visible\s*!important/);
   assert.match(read("src/content.js"), /class="sewa-button-icon"[^>]*>↓<\/span>导入正文/);
 });
+
+test("recent articles load from the publish-list API with DOM fallback and no manual dialog step", () => {
+  const content = read("src/content.js");
+  assert.match(content, /\/cgi-bin\/appmsgpublish/);
+  assert.match(content, /Core\.parsePublishedArticles/);
+  assert.match(content, /return scrapeRecentArticles\(\)/);
+  assert.doesNotMatch(content, /data-sewa-action="open-links"/);
+});

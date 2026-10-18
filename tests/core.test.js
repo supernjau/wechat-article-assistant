@@ -228,3 +228,39 @@ test("buildRecommendationHtml filters invalid article entries before rendering",
   assert.match(html, /有效文章 1/);
   assert.match(html, /有效文章 5/);
 });
+
+test("parsePublishedArticles reads nested publish_page JSON and skips deleted articles and image-text reposts", () => {
+  const info = (articles) => JSON.stringify({ appmsgex: articles });
+  const response = {
+    publish_page: JSON.stringify({
+      publish_list: [
+        {
+          publish_info: info([
+            { title: "最新一篇", link: "https://mp.weixin.qq.com/s/aaa" },
+            { title: "已删除", link: "https://mp.weixin.qq.com/s/del", is_deleted: true },
+            { title: "同次群发第二篇", link: "https://mp.weixin.qq.com/s/bbb" },
+          ]),
+        },
+        {
+          publish_info: info([
+            { title: "同题图文", link: "https://mp.weixin.qq.com/s/img", item_show_type: 8 },
+            { title: "同题图文", link: "https://mp.weixin.qq.com/s/orig", item_show_type: 0 },
+            { title: "音频类文章", link: "https://mp.weixin.qq.com/s/audio", item_show_type: 7 },
+          ]),
+        },
+        { publish_info: "not json" },
+        { publish_info: info([{ title: "上一期", link: "https://mp.weixin.qq.com/s/ccc" }]) },
+      ],
+    }),
+  };
+
+  assert.deepEqual(Core.collectRecentArticles(Core.parsePublishedArticles(response), 5), [
+    { title: "最新一篇", url: "https://mp.weixin.qq.com/s/aaa" },
+    { title: "同次群发第二篇", url: "https://mp.weixin.qq.com/s/bbb" },
+    { title: "同题图文", url: "https://mp.weixin.qq.com/s/orig" },
+    { title: "音频类文章", url: "https://mp.weixin.qq.com/s/audio" },
+    { title: "上一期", url: "https://mp.weixin.qq.com/s/ccc" },
+  ]);
+  assert.deepEqual(Core.parsePublishedArticles(null), []);
+  assert.deepEqual(Core.parsePublishedArticles({ publish_page: "oops" }), []);
+});
