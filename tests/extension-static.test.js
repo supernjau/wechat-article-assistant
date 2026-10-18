@@ -34,7 +34,8 @@ test("official editor writes go through the page-level MP editor bridge", () => 
   assert.match(bridge, /__MP_Editor_JSAPI__/);
   assert.match(bridge, /api\.invoke/);
   assert.match(content, /async function handleImport/);
-  assert.match(content, /await EditorAdapter\.replaceHtml/);
+  assert.match(content, /await recordedWrite\(/);
+  assert.match(content, /EditorAdapter\.replaceHtml\(html\)/);
 });
 
 test("content panel exposes the three requested workflows", () => {
@@ -137,4 +138,17 @@ test("highlight marks are recognised by key styles because the official editor s
   assert.match(content, /HIGHLIGHT_KEY_STYLES/);
   assert.match(content, /background-color:#fff1a8/);
   assert.match(content, /filter\(isHighlightMark\)/);
+});
+
+test("plugin operations are backed up and the panel offers undo and redo", () => {
+  const content = read("src/content.js");
+  for (const action of ["undo", "redo"]) {
+    assert.match(content, new RegExp(`data-sewa-action="${action}"`));
+  }
+  assert.match(content, /Core\.createHistory/);
+  assert.match(content, /history\.record\(/);
+  assert.match(content, /无法备份当前正文，已取消操作/);
+  assert.match(content, /recordedWrite\("插入往期推荐"/);
+  assert.match(content, /transformBody\("应用强调"/);
+  assert.match(content, /transformBody\("移除强调"/);
 });

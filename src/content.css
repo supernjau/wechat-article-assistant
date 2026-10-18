@@ -573,3 +573,28 @@
   overflow-wrap: anywhere;
   font-weight: 600;
 }
+
+.sewa-history {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-bottom: 1px solid #e6ebf1;
+  background: #f8fafc;
+}
+
+.sewa-history-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sewa-history .sewa-secondary-button {
+  min-height: 26px;
+  padding: 2px 9px;
+  font-size: 12px;
+}

@@ -52,6 +52,43 @@
     return { ranges, counts: [...entries.values()] };
   }
 
+  // 插件改动正文前的备份栈：只记录插件自己的操作，最多保留 limit 步。
+  // 撤销/重做分“查看”和“确认”两步，方便写回失败时不丢记录。
+  function createHistory(limit) {
+    const max = Number.isInteger(limit) && limit > 0 ? limit : 10;
+    const undoStack = [];
+    let redoEntry = null;
+    return {
+      record(label, html) {
+        undoStack.push({ label, html, at: Date.now() });
+        if (undoStack.length > max) undoStack.shift();
+        redoEntry = null;
+      },
+      peekUndo() {
+        return undoStack[undoStack.length - 1] || null;
+      },
+      commitUndo(currentHtml) {
+        const entry = undoStack.pop();
+        if (!entry) return null;
+        redoEntry = { label: entry.label, html: currentHtml, at: entry.at };
+        return entry;
+      },
+      peekRedo() {
+        return redoEntry;
+      },
+      commitRedo(currentHtml) {
+        const entry = redoEntry;
+        if (!entry) return null;
+        redoEntry = null;
+        undoStack.push({ label: entry.label, html: currentHtml, at: entry.at });
+        return entry;
+      },
+      size() {
+        return undoStack.length;
+      },
+    };
+  }
+
   function safeUrl(value) {
     const url = String(value || "").trim();
     const normalized = url.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
@@ -257,6 +294,7 @@
   return {
     parseKeywords,
     planKeywordMatches,
+    createHistory,
     safeUrl,
     TEMPLATE_IDS,
     escapeHtml,

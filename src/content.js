@@ -33,6 +33,7 @@
     magazine: "杂志索引",
     studio: "工作室风格",
   };
+  const history = Core.createHistory(10);
   const state = {
     activeTab: "import",
     importMode: "replace",
@@ -140,6 +141,11 @@
       <button type="button" class="sewa-tab" data-sewa-tab="highlight">关键词强调</button>
       <button type="button" class="sewa-tab" data-sewa-tab="recommend">往期推荐</button>
     </nav>
+    <div class="sewa-history">
+      <span class="sewa-history-label"></span>
+      <button type="button" class="sewa-secondary-button" data-sewa-action="undo">撤销</button>
+      <button type="button" class="sewa-secondary-button" data-sewa-action="redo">重做</button>
+    </div>
     <div class="sewa-panel-body">
       <section class="sewa-view is-active" data-sewa-view="import">
         <p class="sewa-hint">粘贴 HTML 代码，或选择已排版的文章文件。</p>
@@ -232,6 +238,9 @@
   const status = panel.querySelector(".sewa-status");
   const importCode = panel.querySelector(".sewa-import-code");
   const importPreview = panel.querySelector(".sewa-import-preview");
+  const historyLabel = panel.querySelector(".sewa-history-label");
+  const undoButton = panel.querySelector('[data-sewa-action="undo"]');
+  const redoButton = panel.querySelector('[data-sewa-action="redo"]');
   const highlightTerms = panel.querySelector(".sewa-highlight-terms");
   const keywordSetSelect = panel.querySelector(".sewa-keyword-set-select");
   const keywordSetName = panel.querySelector(".sewa-keyword-set-name");
@@ -296,6 +305,67 @@
     }
   }
 
+  function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  }
+
+  function renderHistory() {
+    const undo = history.peekUndo();
+    const redo = history.peekRedo();
+    historyLabel.textContent = undo
+      ? `上一步：${undo.label}（${formatTime(undo.at)}）`
+      : "暂无可撤销的操作";
+    undoButton.disabled = !undo;
+    redoButton.disabled = !redo;
+    redoButton.title = redo ? `重做「${redo.label}」` : "";
+  }
+
+  // 改动正文前先备份当前正文；备份不到就不改，免得没有退路。
+  async function backupBody() {
+    try {
+      return await EditorAdapter.getHtml();
+    } catch (error) {
+      throw new Error(`无法备份当前正文，已取消操作：${error.message}`);
+    }
+  }
+
+  async function recordedWrite(label, write) {
+    const before = await backupBody();
+    const result = await write();
+    if (result) {
+      history.record(label, before);
+      renderHistory();
+    }
+    return result;
+  }
+
+  let historyBusy = false;
+  async function restoreBody(direction) {
+    if (historyBusy) return;
+    historyBusy = true;
+    try {
+      const entry = direction === "undo" ? history.peekUndo() : history.peekRedo();
+      if (!entry) return;
+      const current = await backupBody();
+      await EditorAdapter.setContent(entry.html);
+      if (direction === "undo") history.commitUndo(current);
+      else history.commitRedo(current);
+      renderHistory();
+      scheduleKeywordHits();
+      showStatus(
+        direction === "undo"
+          ? `已撤销「${entry.label}」，正文恢复到操作前。`
+          : `已重做「${entry.label}」。`,
+        "success",
+      );
+    } catch (error) {
+      showStatus(error.message, "error");
+    } finally {
+      historyBusy = false;
+    }
+  }
+
   async function handleImport() {
     try {
       const html = sanitizedImportHtml();
@@ -310,10 +380,13 @@
       ) {
         return;
       }
-      const result =
-        state.importMode === "cursor"
-          ? await EditorAdapter.insertHtml(html)
-          : await EditorAdapter.replaceHtml(html);
+      const result = await recordedWrite(
+        state.importMode === "cursor" ? "插入 HTML" : "覆盖正文",
+        () =>
+          state.importMode === "cursor"
+            ? EditorAdapter.insertHtml(html)
+            : EditorAdapter.replaceHtml(html),
+      );
       showStatus(result ? "HTML 已写入正文。" : "没有可写入的正文内容。", result ? "success" : "error");
     } catch (error) {
       showStatus(error.message, "error");
@@ -349,21 +422,31 @@
   }
 
   // 官方编辑器不认直接改页面元素：取出正文 HTML，在内存里改完，再经官方接口写回。
-  async function transformBody(transform) {
+  // 有实际改动时，改动前的正文记入撤销历史。
+  async function transformBody(label, transform) {
     if (EditorAdapter.isOfficialEditorPage()) {
-      const html = await EditorAdapter.getHtml();
+      const html = await backupBody();
       const body = new root.DOMParser().parseFromString(
         `<body>${html}</body>`,
         "text/html",
       ).body;
       const result = transform(body);
-      if (result.changed) await EditorAdapter.setContent(body.innerHTML);
+      if (result.changed) {
+        await EditorAdapter.setContent(body.innerHTML);
+        history.record(label, html);
+        renderHistory();
+      }
       return result;
     }
     const editor = EditorAdapter.findEditor();
     if (!editor) throw new Error("未找到公众号正文编辑器。");
+    const before = await backupBody();
     const result = transform(editor);
-    if (result.changed) dispatchEditorEvents(editor);
+    if (result.changed) {
+      dispatchEditorEvents(editor);
+      history.record(label, before);
+      renderHistory();
+    }
     return result;
   }
 
@@ -431,7 +514,9 @@
         showStatus("请先输入至少一个关键词。", "error");
         return;
       }
-      const { count } = await transformBody((container) => highlightIn(container, terms));
+      const { count } = await transformBody("应用强调", (container) =>
+        highlightIn(container, terms),
+      );
       showStatus(count ? `已强调 ${count} 处关键词。` : "正文中没有找到这些关键词。", count ? "success" : "error");
       saveState();
       scheduleKeywordHits();
@@ -538,7 +623,7 @@
 
   async function handleRemoveHighlights() {
     try {
-      const { count } = await transformBody((container) => {
+      const { count } = await transformBody("移除强调", (container) => {
         const removed = removeHighlights(container);
         return { count: removed, changed: removed > 0 };
       });
@@ -763,10 +848,11 @@
         return;
       }
       const html = Core.buildRecommendationHtml(state.templateId, state.articles);
-      const result =
+      const result = await recordedWrite("插入往期推荐", () =>
         state.recommendMode === "cursor"
-          ? await EditorAdapter.insertHtml(html)
-          : await EditorAdapter.appendHtml(html);
+          ? EditorAdapter.insertHtml(html)
+          : EditorAdapter.appendHtml(html),
+      );
       showStatus(result ? "往期推荐已插入正文。" : "没有可插入的推荐内容。", result ? "success" : "error");
       saveState();
     } catch (error) {
@@ -836,6 +922,8 @@
     if (action === "import-html") handleImport();
     if (action === "apply-highlight") applyHighlights();
     if (action === "remove-highlight") handleRemoveHighlights();
+    if (action === "undo") restoreBody("undo");
+    if (action === "redo") restoreBody("redo");
     if (action === "save-keyword-set") saveKeywordSet();
     if (action === "delete-keyword-set") deleteKeywordSet();
     if (action === "scrape-articles") {
@@ -936,6 +1024,7 @@
     highlightTerms.value = state.highlightTerms;
     firstOnlyCheckbox.checked = state.highlightFirstOnly;
     renderKeywordSets();
+    renderHistory();
     const importMode = panel.querySelector(
       `input[name="sewa-import-mode"][value="${state.importMode}"]`,
     );

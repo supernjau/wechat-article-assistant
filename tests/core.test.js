@@ -329,3 +329,43 @@ test("planKeywordMatches treats regex characters literally and handles empty inp
     counts: [],
   });
 });
+
+test("createHistory undoes plugin operations in reverse order and keeps only the latest entries", () => {
+  const history = Core.createHistory(3);
+  assert.equal(history.peekUndo(), null);
+  assert.equal(history.commitUndo("x"), null);
+
+  history.record("导入正文", "<p>0</p>");
+  history.record("应用强调", "<p>1</p>");
+  history.record("插入往期推荐", "<p>2</p>");
+  history.record("移除强调", "<p>3</p>");
+
+  assert.equal(history.size(), 3);
+  assert.equal(history.peekUndo().label, "移除强调");
+  assert.equal(history.peekUndo().html, "<p>3</p>");
+  assert.equal(history.commitUndo("<p>4</p>").html, "<p>3</p>");
+  assert.equal(history.commitUndo("<p>3</p>").html, "<p>2</p>");
+  assert.equal(history.commitUndo("<p>2</p>").html, "<p>1</p>");
+  assert.equal(history.peekUndo(), null);
+});
+
+test("createHistory redo restores the state before the undo and is cleared by a new operation", () => {
+  const history = Core.createHistory();
+  history.record("应用强调", "<p>before</p>");
+
+  assert.equal(history.peekRedo(), null);
+  history.commitUndo("<p>after</p>");
+  assert.deepEqual(
+    { label: history.peekRedo().label, html: history.peekRedo().html },
+    { label: "应用强调", html: "<p>after</p>" },
+  );
+
+  const redone = history.commitRedo("<p>before</p>");
+  assert.equal(redone.html, "<p>after</p>");
+  assert.equal(history.peekRedo(), null);
+  assert.equal(history.peekUndo().html, "<p>before</p>");
+
+  history.commitUndo("<p>after</p>");
+  history.record("导入正文", "<p>other</p>");
+  assert.equal(history.peekRedo(), null);
+});
